@@ -7,15 +7,16 @@
 
 namespace serial_can_bridge
 {
-using SerialFrame = std::array<uint8_t, 17>;
+using SerialFrame = std::vector<uint8_t>;
 
 inline bool is_valid_serial_frame(const SerialFrame& bytes)
 {
-    return bytes[0] == 0x41 && bytes[1] == 0x54 && bytes[6] == 8 && (bytes[5] & 0x07U) == 0x04U &&
-           bytes[15] == 0x0d && bytes[16] == 0x0a;
+    return bytes.size() >= 9 && bytes[0] == 0x41 && bytes[1] == 0x54 && bytes[6] <= 8 &&
+           bytes.size() == 9U + bytes[6] && (bytes[5] & 0x07U) == 0x04U &&
+           bytes[bytes.size() - 2] == 0x0d && bytes.back() == 0x0a;
 }
 
-// Find fixed-size packets in a serial stream without allocating a partial buffer.
+// Find packets of 9 + DLC bytes, using a bounded buffer for partial packets.
 // Use one parser per connection, from one thread.
 class SerialFrameParser
 {
@@ -32,15 +33,27 @@ class SerialFrameParser
                     buffer_[0] == 0x41 && (size_ == 1 || buffer_[1] == 0x54);
                 if (header_matches)
                 {
-                    if (size_ < buffer_.size())
+                    if (size_ < 7)
                     {
                         break;
                     }
-                    if (is_valid_serial_frame(buffer_))
+                    if (buffer_[6] <= 8 && (buffer_[5] & 0x07U) == 0x04U)
                     {
-                        frames.push_back(buffer_);
-                        size_ = 0;
-                        break;
+                        const std::size_t packet_size = 9U + buffer_[6];
+                        if (size_ < packet_size)
+                        {
+                            break;
+                        }
+                        if (buffer_[packet_size - 2] == 0x0d && buffer_[packet_size - 1] == 0x0a)
+                        {
+                            frames.emplace_back(buffer_.begin(), buffer_.begin() + packet_size);
+                            for (std::size_t i = packet_size; i < size_; ++i)
+                            {
+                                buffer_[i - packet_size] = buffer_[i];
+                            }
+                            size_ -= packet_size;
+                            continue;
+                        }
                     }
                 }
                 // Look for another AT header inside an invalid candidate.
@@ -60,7 +73,7 @@ class SerialFrameParser
     }
 
   private:
-    SerialFrame buffer_{};
+    std::array<uint8_t, 17> buffer_{};
     std::size_t size_{0};
 };
 } // namespace serial_can_bridge

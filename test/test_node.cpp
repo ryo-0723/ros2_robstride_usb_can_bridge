@@ -109,23 +109,32 @@ TEST_F(NodeTest, ConvertsTopicsToSerialAndSerialToTopics)
     can_msgs::msg::Frame frame;
     frame.id = 0x1200fd01;
     frame.is_extended = true;
-    frame.dlc = 8;
-    frame.data = {5, 0x70, 0, 0, 1, 0, 0, 0};
-    publisher->publish(frame);
     pollfd fd{master_, POLLIN, 0};
-    ASSERT_TRUE(wait_for(executor, [&]() { return poll(&fd, 1, 0) > 0; }));
-    serial_can_bridge::SerialFrame packet{};
-    ASSERT_EQ(::read(master_, packet.data(), packet.size()), 17);
-    EXPECT_EQ(packet, serial_can_bridge::encode_frame(frame));
-    ASSERT_EQ(::write(master_, packet.data(), packet.size()), 17);
-    ASSERT_TRUE(wait_for(executor, [&]() { return received.has_value(); }));
-    EXPECT_EQ(received->id, frame.id);
-    EXPECT_EQ(received->data, frame.data);
-    EXPECT_EQ(received->dlc, 8);
-    EXPECT_TRUE(received->is_extended);
-    EXPECT_EQ(received->header.frame_id, "can");
-    EXPECT_GT(rclcpp::Time(received->header.stamp).nanoseconds(), 0);
-    frame.dlc = 7;
+    for (const uint8_t dlc : {8, 4, 0})
+    {
+        frame.dlc = dlc;
+        frame.data = {5, 0x70, 0, 0, 1, 0, 0, 0};
+        received.reset();
+        publisher->publish(frame);
+        ASSERT_TRUE(wait_for(executor, [&]() { return poll(&fd, 1, 0) > 0; }));
+        serial_can_bridge::SerialFrame packet(9U + dlc);
+        ASSERT_EQ(::read(master_, packet.data(), packet.size()),
+                  static_cast<ssize_t>(packet.size()));
+        EXPECT_EQ(packet, serial_can_bridge::encode_frame(frame));
+        ASSERT_EQ(::write(master_, packet.data(), packet.size()),
+                  static_cast<ssize_t>(packet.size()));
+        ASSERT_TRUE(wait_for(executor, [&]() { return received.has_value(); }));
+        EXPECT_EQ(received->id, frame.id);
+        for (std::size_t i = 0; i < frame.data.size(); ++i)
+        {
+            EXPECT_EQ(received->data[i], i < dlc ? frame.data[i] : 0);
+        }
+        EXPECT_EQ(received->dlc, dlc);
+        EXPECT_TRUE(received->is_extended);
+        EXPECT_EQ(received->header.frame_id, "can");
+        EXPECT_GT(rclcpp::Time(received->header.stamp).nanoseconds(), 0);
+    }
+    frame.dlc = 9;
     publisher->publish(frame);
     const auto deadline = std::chrono::steady_clock::now() + 50ms;
     while (std::chrono::steady_clock::now() < deadline)

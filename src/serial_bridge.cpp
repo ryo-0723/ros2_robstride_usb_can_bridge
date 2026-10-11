@@ -82,7 +82,7 @@ void SerialBridge::write(SerialFrame data)
 {
     if (!is_valid_serial_frame(data))
     {
-        throw std::invalid_argument("Expected a valid 17-byte EL05 serial frame");
+        throw std::invalid_argument("Expected a valid AT serial frame with DLC <= 8");
     }
     std::lock_guard<std::mutex> lock(lifecycle_mutex_);
     const auto failure = error();

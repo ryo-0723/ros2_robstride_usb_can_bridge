@@ -16,7 +16,7 @@
 
 namespace serial_can_bridge
 {
-// Fixed-size EL05 serial packet transport. CAN conversion is handled separately.
+// Variable-length AT serial packet transport. CAN conversion is handled separately.
 class SerialBridge
 {
   public:

@@ -13,14 +13,14 @@ namespace serial_can_bridge
 {
 // RobStride USB-CAN AT mode: AT + packed ID (big endian) + DLC + data + CRLF.
 // Supports extended data frames only. Throws std::invalid_argument for invalid
-// IDs, DLC != 8, standard frames, RTR frames, or CAN error frames.
+// IDs, DLC > 8, standard frames, RTR frames, or CAN error frames.
 SerialFrame encode_frame(const can_msgs::msg::Frame& frame);
 
-// Decode one EL05 frame after checking AT, DLC == 8, extended-data flags and CRLF.
+// Decode one AT packet after checking its length, DLC <= 8, flags and CRLF.
 // Returns nullopt for a malformed frame. ROS header fields remain unset.
 std::optional<can_msgs::msg::Frame> decode_frame(const SerialFrame& bytes);
 
-// Stateful decoder for fixed 17-byte EL05 frames (DLC == 8).
+// Stateful decoder for AT packets of 9 + DLC bytes (DLC 0..8).
 // Use one instance per connection
 // from one thread. Partial frames survive between calls; malformed bytes are
 // skipped. ROS header fields are left for the caller to fill in.

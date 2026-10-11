@@ -2,8 +2,8 @@
 
 RobStride USB-CANのATモードと `can_msgs/msg/Frame` を変換するROS 2ノード
 
-- 対応：拡張データフレーム、DLC 8（シリアルパケットは17バイト固定）
-- 非対応：標準ID、RTR、エラーフレーム、DLCが8以外のフレーム
+- 対応：拡張データフレーム、DLC 0〜8（シリアルパケットは9 + DLCバイト）
+- 非対応：標準ID、RTR、エラーフレーム、DLCが8を超えるフレーム
 - パッケージ名・実行ファイル名・既定のノード名：`serial_can_bridge`
 
 ## ビルド
@@ -79,6 +79,8 @@ ros2 topic echo /from_can_bus
 ```
 
 送信例（IDとデータは接続先の仕様に合わせて変更）
+`dlc` が有効なデータ長で、`data` は常に8要素
+たとえばDLC 4なら先頭4バイトだけを送信し、受信時は残り4バイトをゼロで埋めます
 
 ```bash
 ros2 topic pub --once /to_can_bus can_msgs/msg/Frame \

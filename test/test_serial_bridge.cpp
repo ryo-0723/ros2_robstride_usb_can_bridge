@@ -51,33 +51,36 @@ serial_can_bridge::SerialFrame packet(uint8_t value)
     return {0x41, 0x54, 0, 0, 0, 4, 8, value, 0, 0, 0, 0, 0, 0, 0, 0x0d, 0x0a};
 }
 
-TEST_F(SerialBridgeTest, QueuedFixedSizeWritesKeepOrder)
+TEST_F(SerialBridgeTest, QueuedMixedLengthWritesKeepOrder)
 {
     SerialBridge serial(device_, 115200, 1s);
     serial.open();
     std::vector<uint8_t> expected;
     for (int i = 0; i < 100; ++i)
     {
-        const auto frame = packet(static_cast<uint8_t>(i));
+        auto frame = packet(static_cast<uint8_t>(i));
+        const auto dlc = static_cast<uint8_t>(i % 9);
+        frame[6] = dlc;
+        frame.resize(9U + dlc);
+        frame[frame.size() - 2] = 0x0d;
+        frame.back() = 0x0a;
         expected.insert(expected.end(), frame.begin(), frame.end());
         serial.write(frame);
     }
     std::vector<uint8_t> transmitted;
-    ASSERT_TRUE(wait_for(
-        [&]()
+    ASSERT_TRUE(wait_for([&]() {
+        pollfd descriptor{master_, POLLIN, 0};
+        if (poll(&descriptor, 1, 0) > 0)
         {
-            pollfd descriptor{master_, POLLIN, 0};
-            if (poll(&descriptor, 1, 0) > 0)
+            uint8_t buffer[512];
+            const auto count = ::read(master_, buffer, sizeof(buffer));
+            if (count > 0)
             {
-                uint8_t buffer[512];
-                const auto count = ::read(master_, buffer, sizeof(buffer));
-                if (count > 0)
-                {
-                    transmitted.insert(transmitted.end(), buffer, buffer + count);
-                }
+                transmitted.insert(transmitted.end(), buffer, buffer + count);
             }
-            return transmitted.size() >= expected.size();
-        }));
+        }
+        return transmitted.size() >= expected.size();
+    }));
     EXPECT_EQ(transmitted, expected);
     EXPECT_FALSE(serial.error());
     EXPECT_THROW(serial.write({}), std::invalid_argument);
@@ -101,20 +104,19 @@ TEST_F(SerialBridgeTest, ReceiveReturnsOnlyCompleteValidatedPackets)
     ASSERT_EQ(::write(master_, prefix.data(), prefix.size()), static_cast<ssize_t>(prefix.size()));
     std::this_thread::sleep_for(20ms);
     EXPECT_FALSE(serial.read());
-    const auto second = packet(0xff);
+    const serial_can_bridge::SerialFrame second{0x41, 0x54, 0,    0,    0,    4,   4,
+                                                0xff, 0x41, 0x0d, 0x0a, 0x0d, 0x0a};
     std::vector<uint8_t> suffix(first.begin() + 10, first.end());
     suffix.insert(suffix.end(), second.begin(), second.end());
     ASSERT_EQ(::write(master_, suffix.data(), suffix.size()), static_cast<ssize_t>(suffix.size()));
     std::vector<serial_can_bridge::SerialFrame> received;
-    ASSERT_TRUE(wait_for(
-        [&]()
+    ASSERT_TRUE(wait_for([&]() {
+        if (auto frame = serial.read())
         {
-            if (auto frame = serial.read())
-            {
-                received.push_back(*frame);
-            }
-            return received.size() == 2;
-        }));
+            received.push_back(*frame);
+        }
+        return received.size() == 2;
+    }));
     EXPECT_EQ(received[0], first);
     EXPECT_EQ(received[1], second);
     EXPECT_FALSE(serial.read());
@@ -162,16 +164,14 @@ TEST_F(SerialBridgeTest, CloseCancelsPendingWritesAndReopenHasNoStaleQueue)
     const auto frame = packet(0x42);
     serial.write(frame);
     std::vector<uint8_t> output;
-    ASSERT_TRUE(wait_for(
-        [&]()
+    ASSERT_TRUE(wait_for([&]() {
+        const auto count = ::read(master_, buffer, sizeof(buffer));
+        if (count > 0)
         {
-            const auto count = ::read(master_, buffer, sizeof(buffer));
-            if (count > 0)
-            {
-                output.insert(output.end(), buffer, buffer + count);
-            }
-            return output.size() >= frame.size();
-        }));
+            output.insert(output.end(), buffer, buffer + count);
+        }
+        return output.size() >= frame.size();
+    }));
     EXPECT_EQ(output, std::vector<uint8_t>(frame.begin(), frame.end()));
     EXPECT_FALSE(serial.error());
 }
@@ -189,12 +189,10 @@ TEST_F(SerialBridgeTest, ReopenDiscardsPartialReceivePacket)
     ASSERT_EQ(::write(master_, frame.data() + 10, 7), 7);
     ASSERT_EQ(::write(master_, frame.data(), frame.size()), 17);
     std::optional<serial_can_bridge::SerialFrame> result;
-    ASSERT_TRUE(wait_for(
-        [&]()
-        {
-            result = serial.read();
-            return bool(result);
-        }));
+    ASSERT_TRUE(wait_for([&]() {
+        result = serial.read();
+        return bool(result);
+    }));
     EXPECT_EQ(*result, frame);
     EXPECT_FALSE(serial.read());
 }

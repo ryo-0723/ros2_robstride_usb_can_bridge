@@ -3,7 +3,7 @@
 <package format="3">
   <name>serial_can_bridge</name>
   <version>1.0.0</version>
-  <description>ROS 2 bridge for fixed-size RobStride USB-CAN AT serial packets.</description>
+  <description>ROS 2 bridge for RobStride USB-CAN AT serial packets with DLC 0 to 8.</description>
   <maintainer email="tengbenliang742@gmail.com">ryo-0723</maintainer>
   <license>MIT</license>
   <url type="repository">https://github.com/ryo-0723/ros2_serial_can_bridge</url>
