@@ -6,6 +6,8 @@
   <description>ROS 2 bridge for fixed-size RobStride USB-CAN AT serial packets.</description>
   <maintainer email="tengbenliang742@gmail.com">ryo-0723</maintainer>
   <license>MIT</license>
+  <url type="repository">https://github.com/ryo-0723/ros2_serial_can_bridge</url>
+  <url type="bugtracker">https://github.com/ryo-0723/ros2_serial_can_bridge/issues</url>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
   <depend>boost</depend>
