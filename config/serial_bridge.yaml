@@ -1,0 +1,9 @@
+serial_can_bridge:
+  ros__parameters:
+    device: /dev/ttyUSB0
+    baud_rate: 921600
+    tx_topic: to_can_bus
+    rx_topic: from_can_bus
+    frame_id: can
+    poll_period: 0.001
+    write_timeout: 0.1
