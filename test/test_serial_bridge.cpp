@@ -126,7 +126,7 @@ TEST_F(SerialBridgeTest, BlockedFixedSizeWritesReportTimeout)
 {
     SerialBridge serial(device_, 115200, 200ms);
     serial.open();
-    // Fill the PTY output without draining it; a queued packet will block.
+    // @note 疑似端末を読み出さずに送信バッファを満たし、タイムアウトを発生させる
     for (int i = 0; i < 4096; ++i)
     {
         serial.write(packet(0x55));

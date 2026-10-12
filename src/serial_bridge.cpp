@@ -54,7 +54,8 @@ void SerialBridge::open()
         accepting_ = false;
         boost::system::error_code ignored;
         port_.close(ignored);
-        io_.poll(); // Drain cancellation if thread creation failed.
+        // @note スレッド作成失敗時も、受信のキャンセル処理を完了させる
+        io_.poll();
         throw;
     }
 }
@@ -62,7 +63,7 @@ void SerialBridge::open()
 void SerialBridge::close()
 {
     std::lock_guard<std::mutex> lock(lifecycle_mutex_);
-    // Stop and join before accessing the shared serial_port from this thread.
+    // @note ポートを操作する前に送受信スレッドの終了を待つ
     accepting_ = false;
     io_.stop();
     if (thread_.joinable())
@@ -73,7 +74,8 @@ void SerialBridge::close()
     write_timer_.cancel();
     port_.close(ignored);
     io_.restart();
-    io_.poll(); // Complete cancelled reads/writes before reusing their buffers.
+    // @note バッファを再利用する前に送受信のキャンセル処理を完了させる
+    io_.poll();
     write_queue_.clear();
     writing_ = false;
 }
@@ -125,7 +127,7 @@ void SerialBridge::start_write()
     write_timer_.async_wait(
         [this, id](const boost::system::error_code& error)
         {
-            // An expired timer may already be queued when cancel() is called.
+            // @note cancel()後も期限切れの処理が残るため、送信IDで古いタイマーを除外する
             if (!error && accepting_ && writing_ && id == write_id_)
             {
                 fail(boost::asio::error::timed_out);
@@ -165,8 +167,8 @@ void SerialBridge::fail(const boost::system::error_code& error)
     write_timer_.cancel();
     boost::system::error_code ignored;
     port_.close(ignored);
-    // A timed out write may have sent a prefix: discard pending data instead of
-    // continuing a potentially broken byte stream. Call close()/open() to recover.
+    // @note 送信途中で失敗した可能性があるため、未送信データを破棄する
+    // @note 通信の再開にはclose()後にopen()を呼ぶ
     write_queue_.clear();
     writing_ = false;
 }
@@ -174,7 +176,7 @@ void SerialBridge::fail(const boost::system::error_code& error)
 std::optional<SerialFrame> SerialBridge::read()
 {
     std::lock_guard<std::mutex> lock(receive_mutex_);
-    // Deliver already received bytes before reporting a subsequent disconnect.
+    // @note 通信エラーがあっても、受信済みのパケットを先に返す
     if (received_.empty() && io_error_)
     {
         throw boost::system::system_error(io_error_, "read serial bytes");

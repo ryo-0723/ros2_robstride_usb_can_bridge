@@ -7,8 +7,14 @@
 
 namespace serial_can_bridge
 {
+/// @brief 9 + DLCバイトのATパケット（DLC 0〜8）
 using SerialFrame = std::vector<uint8_t>;
 
+/**
+ * @brief 長さ、ATヘッダー、DLC、拡張データフレームのフラグ、CRLFを検証する
+ * @param bytes 検証するパケット
+ * @return 正常ならtrue
+ */
 inline bool is_valid_serial_frame(const SerialFrame& bytes)
 {
     return bytes.size() >= 9 && bytes[0] == 0x41 && bytes[1] == 0x54 && bytes[6] <= 8 &&
@@ -16,11 +22,21 @@ inline bool is_valid_serial_frame(const SerialFrame& bytes)
            bytes[bytes.size() - 2] == 0x0d && bytes.back() == 0x0a;
 }
 
-// Find packets of 9 + DLC bytes, using a bounded buffer for partial packets.
-// Use one parser per connection, from one thread.
+/**
+ * @brief シリアル受信データから可変長のATパケットを取り出す
+ * @note 未完成のパケットは最大17バイトの固定バッファで保持する
+ * @note 接続ごとに1インスタンスを用意し、同じスレッドから呼び出す
+ */
 class SerialFrameParser
 {
   public:
+    /**
+     * @brief 受信データを追加し、完成したパケットを返す
+     * @param bytes 受信データの先頭（countが0ならnullptrも可）
+     * @param count 受信バイト数
+     * @return 検証済みのATパケットの一覧
+     * @note 分割受信や複数パケットの一括受信に対応し、不正なデータは読み飛ばす
+     */
     std::vector<SerialFrame> feed(const uint8_t* bytes, std::size_t count)
     {
         std::vector<SerialFrame> frames;
@@ -56,7 +72,7 @@ class SerialFrameParser
                         }
                     }
                 }
-                // Look for another AT header inside an invalid candidate.
+                // @note 不正な候補を1バイトずつずらし、次のATヘッダーを探す
                 for (std::size_t i = 1; i < size_; ++i)
                 {
                     buffer_[i - 1] = buffer_[i];
@@ -67,6 +83,7 @@ class SerialFrameParser
         return frames;
     }
 
+    /// @brief 未完成のパケットを破棄する
     void reset()
     {
         size_ = 0;

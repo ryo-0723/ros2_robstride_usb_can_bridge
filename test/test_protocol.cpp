@@ -145,7 +145,8 @@ TEST(Protocol, SkipsNoiseInvalidDlcFlagsAndTrailerThenRecovers)
     bad = valid;
     bad.back() = 0;
     stream.insert(stream.end(), bad.begin(), bad.end());
-    stream.push_back(0x41); // Repeated A before a valid AT header.
+    // @note 正常なATヘッダーの直前にAが重複しても復帰できることを確認する
+    stream.push_back(0x41);
     stream.insert(stream.end(), valid.begin(), valid.end());
     FrameDecoder decoder;
     const auto result = decoder.decode(stream);

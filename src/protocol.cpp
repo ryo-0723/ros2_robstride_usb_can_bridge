@@ -13,19 +13,19 @@ SerialFrame encode_frame(const can_msgs::msg::Frame& frame)
         throw std::invalid_argument("Expected an extended CAN data frame, 29-bit ID, and DLC <= 8");
     }
 
-    // EL05 official manual, section 3.3.5: ID 0x1200FD01 -> 90 07 E8 0C.
+    // @note EL05公式マニュアル3.3.5の例：ID 0x1200FD01 → 90 07 E8 0C
     const uint32_t packed_id = (frame.id << 3) | 0x04U;
     SerialFrame bytes(9U + frame.dlc, 0);
-    bytes[0] = 0x41; // A
-    bytes[1] = 0x54; // T
+    bytes[0] = 0x41;
+    bytes[1] = 0x54;
     for (std::size_t i = 0; i < 4; ++i)
     {
         bytes[2 + i] = static_cast<uint8_t>(packed_id >> (24 - 8 * i));
     }
     bytes[6] = frame.dlc;
     std::copy_n(frame.data.begin(), frame.dlc, bytes.begin() + 7);
-    bytes[bytes.size() - 2] = 0x0d; // CR
-    bytes.back() = 0x0a; // LF
+    bytes[bytes.size() - 2] = 0x0d;
+    bytes.back() = 0x0a;
     return bytes;
 }
 
