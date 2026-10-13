@@ -1,4 +1,4 @@
-#include "serial_can_bridge/serial_bridge.hpp"
+#include "robstride_usb_can_bridge/serial_bridge.hpp"
 
 #include <gtest/gtest.h>
 #include <fcntl.h>
@@ -12,7 +12,7 @@
 #include <functional>
 
 using namespace std::chrono_literals;
-using serial_can_bridge::SerialBridge;
+using robstride_usb_can_bridge::SerialBridge;
 
 namespace
 {
@@ -82,9 +82,9 @@ class SerialBridgeTest : public testing::Test
         return filled;
     }
     /// @brief 出力を読み出し、指定件数のATパケットが揃うまで待つ
-    bool collect_output(std::vector<serial_can_bridge::SerialFrame>& frames, std::size_t expected)
+    bool collect_output(std::vector<robstride_usb_can_bridge::SerialFrame>& frames, std::size_t expected)
     {
-        serial_can_bridge::SerialFrameParser parser;
+        robstride_usb_can_bridge::SerialFrameParser parser;
         return wait_for([&]()
                         {
                             pollfd descriptor{master_, POLLIN, 0};
@@ -105,7 +105,7 @@ class SerialBridgeTest : public testing::Test
     std::string device_;
 };
 
-serial_can_bridge::SerialFrame packet(uint8_t value)
+robstride_usb_can_bridge::SerialFrame packet(uint8_t value)
 {
     return {0x41, 0x54, 0, 0, 0, 4, 8, value, 0, 0, 0, 0, 0, 0, 0, 0x0d, 0x0a};
 }
@@ -163,12 +163,12 @@ TEST_F(SerialBridgeTest, ReceiveReturnsOnlyCompleteValidatedPackets)
     ASSERT_EQ(::write(master_, prefix.data(), prefix.size()), static_cast<ssize_t>(prefix.size()));
     std::this_thread::sleep_for(20ms);
     EXPECT_FALSE(serial.read());
-    const serial_can_bridge::SerialFrame second{0x41, 0x54, 0,    0,    0,    4,   4,
+    const robstride_usb_can_bridge::SerialFrame second{0x41, 0x54, 0,    0,    0,    4,   4,
                                                 0xff, 0x41, 0x0d, 0x0a, 0x0d, 0x0a};
     std::vector<uint8_t> suffix(first.begin() + 10, first.end());
     suffix.insert(suffix.end(), second.begin(), second.end());
     ASSERT_EQ(::write(master_, suffix.data(), suffix.size()), static_cast<ssize_t>(suffix.size()));
-    std::vector<serial_can_bridge::SerialFrame> received;
+    std::vector<robstride_usb_can_bridge::SerialFrame> received;
     ASSERT_TRUE(wait_for([&]() {
         if (auto frame = serial.read())
         {
@@ -248,7 +248,7 @@ TEST_F(SerialBridgeTest, ReopenDiscardsPartialReceivePacket)
     serial.open();
     ASSERT_EQ(::write(master_, frame.data() + 10, 7), 7);
     ASSERT_EQ(::write(master_, frame.data(), frame.size()), 17);
-    std::optional<serial_can_bridge::SerialFrame> result;
+    std::optional<robstride_usb_can_bridge::SerialFrame> result;
     ASSERT_TRUE(wait_for([&]() {
         result = serial.read();
         return bool(result);
@@ -273,7 +273,7 @@ TEST_F(SerialBridgeTest, TransmitOverflowKeepsNewestWaitingPackets)
     EXPECT_EQ(stats.tx_pending, 3U);
     EXPECT_EQ(stats.tx_overflow, 1U);
     EXPECT_EQ(stats.tx_expired, 0U);
-    std::vector<serial_can_bridge::SerialFrame> frames;
+    std::vector<robstride_usb_can_bridge::SerialFrame> frames;
     ASSERT_TRUE(collect_output(frames, 4));
     ASSERT_EQ(frames.size(), 4U);
     EXPECT_EQ(frames[0], packet(1));
@@ -298,7 +298,7 @@ TEST_F(SerialBridgeTest, ExpiredPacketsAreDiscardedBeforeNextSend)
     ASSERT_EQ(serial.queue_statistics().tx_pending, 2U);
     std::this_thread::sleep_for(150ms);
     ASSERT_EQ(serial.queue_statistics().tx_pending, 2U);
-    std::vector<serial_can_bridge::SerialFrame> frames;
+    std::vector<robstride_usb_can_bridge::SerialFrame> frames;
     ASSERT_TRUE(collect_output(frames, 1));
     ASSERT_TRUE(wait_for([&]() { return serial.queue_statistics().tx_expired == 2; }));
     serial.write(packet(4));
@@ -324,7 +324,7 @@ TEST_F(SerialBridgeTest, EnqueueDiscardsExpiredWaitingPackets)
     serial.write(packet(4));
     EXPECT_EQ(serial.queue_statistics().tx_pending, 1U);
     EXPECT_EQ(serial.queue_statistics().tx_expired, 2U);
-    std::vector<serial_can_bridge::SerialFrame> frames;
+    std::vector<robstride_usb_can_bridge::SerialFrame> frames;
     ASSERT_TRUE(collect_output(frames, 2));
     ASSERT_EQ(frames.size(), 2U);
     EXPECT_EQ(frames[0], packet(1));

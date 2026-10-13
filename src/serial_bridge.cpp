@@ -1,9 +1,9 @@
-#include "serial_can_bridge/serial_bridge.hpp"
+#include "robstride_usb_can_bridge/serial_bridge.hpp"
 
 #include <stdexcept>
 #include <utility>
 
-namespace serial_can_bridge
+namespace robstride_usb_can_bridge
 {
 SerialBridge::SerialBridge(const std::string& device, unsigned int baud_rate,
                            std::chrono::milliseconds write_timeout,
@@ -292,4 +292,4 @@ void SerialBridge::start_read()
                               }
                           });
 }
-} // namespace serial_can_bridge
+} // namespace robstride_usb_can_bridge

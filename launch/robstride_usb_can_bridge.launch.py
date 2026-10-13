@@ -46,9 +46,9 @@ def launch_node(context):
         parameters.append(overrides)
 
     return [Node(
-        package='serial_can_bridge',
-        executable='serial_can_bridge',
-        name='serial_can_bridge',
+        package='robstride_usb_can_bridge',
+        executable='robstride_usb_can_bridge',
+        name='robstride_usb_can_bridge',
         output='screen',
         parameters=parameters,
     )]

@@ -1,9 +1,9 @@
-#include "serial_can_bridge/protocol.hpp"
+#include "robstride_usb_can_bridge/protocol.hpp"
 
 #include <algorithm>
 #include <stdexcept>
 
-namespace serial_can_bridge
+namespace robstride_usb_can_bridge
 {
 SerialFrame encode_frame(const can_msgs::msg::Frame& frame)
 {
@@ -64,4 +64,4 @@ void FrameDecoder::reset()
 {
     parser_.reset();
 }
-} // namespace serial_can_bridge
+} // namespace robstride_usb_can_bridge

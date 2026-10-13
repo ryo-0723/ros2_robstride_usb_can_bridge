@@ -1,6 +1,6 @@
 #pragma once
 
-#include "serial_can_bridge/serial_frame.hpp"
+#include "robstride_usb_can_bridge/serial_frame.hpp"
 
 #include <boost/asio.hpp>
 #include <array>
@@ -15,7 +15,7 @@
 #include <thread>
 #include <vector>
 
-namespace serial_can_bridge
+namespace robstride_usb_can_bridge
 {
 /**
  * @brief ATパケットの送受信を専用スレッドで処理する
@@ -156,4 +156,4 @@ class SerialBridge
     uint64_t rx_overflow_{0};
     boost::system::error_code io_error_;
 };
-} // namespace serial_can_bridge
+} // namespace robstride_usb_can_bridge

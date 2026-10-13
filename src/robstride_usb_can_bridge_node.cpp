@@ -1,5 +1,5 @@
-#include "serial_can_bridge/serial_can_bridge_node.hpp"
-#include "serial_can_bridge/protocol.hpp"
+#include "robstride_usb_can_bridge/robstride_usb_can_bridge_node.hpp"
+#include "robstride_usb_can_bridge/protocol.hpp"
 
 #include <rcl_interfaces/msg/parameter_descriptor.hpp>
 #include <chrono>
@@ -7,10 +7,10 @@
 #include <limits>
 #include <stdexcept>
 
-namespace serial_can_bridge
+namespace robstride_usb_can_bridge
 {
-SerialCanBridgeNode::SerialCanBridgeNode(const rclcpp::NodeOptions& options)
-    : Node("serial_can_bridge", options)
+RobStrideUsbCanBridgeNode::RobStrideUsbCanBridgeNode(const rclcpp::NodeOptions& options)
+    : Node("robstride_usb_can_bridge", options)
 {
     rcl_interfaces::msg::ParameterDescriptor descriptor;
     descriptor.read_only = true;
@@ -57,7 +57,7 @@ SerialCanBridgeNode::SerialCanBridgeNode(const rclcpp::NodeOptions& options)
                 static_cast<long long>(baud), tx.c_str(), rx.c_str());
 }
 
-void SerialCanBridgeNode::transmit(const can_msgs::msg::Frame& frame)
+void RobStrideUsbCanBridgeNode::transmit(const can_msgs::msg::Frame& frame)
 {
     SerialFrame packet;
     try
@@ -73,7 +73,7 @@ void SerialCanBridgeNode::transmit(const can_msgs::msg::Frame& frame)
     serial_->write(packet);
 }
 
-void SerialCanBridgeNode::receive()
+void RobStrideUsbCanBridgeNode::receive()
 {
     const auto stats = serial_->queue_statistics();
     if (stats.tx_overflow != last_queue_statistics_.tx_overflow ||
@@ -104,4 +104,4 @@ void SerialCanBridgeNode::receive()
         }
     }
 }
-} // namespace serial_can_bridge
+} // namespace robstride_usb_can_bridge

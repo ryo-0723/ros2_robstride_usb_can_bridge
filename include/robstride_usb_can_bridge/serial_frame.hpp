@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace serial_can_bridge
+namespace robstride_usb_can_bridge
 {
 /// @brief 9 + DLCバイトのATパケット（DLC 0〜8）
 using SerialFrame = std::vector<uint8_t>;
@@ -93,4 +93,4 @@ class SerialFrameParser
     std::array<uint8_t, 17> buffer_{};
     std::size_t size_{0};
 };
-} // namespace serial_can_bridge
+} // namespace robstride_usb_can_bridge

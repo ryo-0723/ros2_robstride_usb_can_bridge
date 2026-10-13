@@ -1,10 +1,13 @@
-# serial_can_bridge
+# robstride_usb_can_bridge
 
-RobStride USB-CANのATモードと `can_msgs/msg/Frame` を変換するROS 2ノード
+RobStride社が販売するUSB-CANアダプタのAT形式と、ROS 2の `can_msgs/msg/Frame` を変換するノード
+
+SLCANには非対応
+SocketCANの `can0` などは使用せず、`/dev/ttyUSB0` などのシリアルデバイスへ直接接続
 
 - 対応：拡張データフレーム、DLC 0〜8（シリアルパケットは9 + DLCバイト）
 - 非対応：標準ID、RTR、エラーフレーム、DLCが8を超えるフレーム
-- パッケージ名・実行ファイル名・既定のノード名：`serial_can_bridge`
+- パッケージ名・実行ファイル名・既定のノード名：`robstride_usb_can_bridge`
 
 ## ビルド
 
@@ -17,7 +20,7 @@ cd ~/ros2_ws/src
 git clone https://github.com/ryo-0723/ros2_serial_can_bridge.git
 cd ~/ros2_ws
 rosdep install --from-paths src --ignore-src -y
-colcon build --packages-select serial_can_bridge
+colcon build --packages-select robstride_usb_can_bridge
 source install/setup.bash
 ```
 
@@ -35,31 +38,31 @@ source install/setup.bash
 既定値で起動する場合
 
 ```bash
-ros2 run serial_can_bridge serial_can_bridge
-ros2 launch serial_can_bridge serial_can_bridge.launch.py
+ros2 run robstride_usb_can_bridge robstride_usb_can_bridge
+ros2 launch robstride_usb_can_bridge robstride_usb_can_bridge.launch.py
 ```
 
 YAMLを指定する場合
 
 ```bash
-ros2 launch serial_can_bridge serial_can_bridge.launch.py \
-  params_file:="$(ros2 pkg prefix serial_can_bridge)/share/serial_can_bridge/config/serial_bridge.yaml"
+ros2 launch robstride_usb_can_bridge robstride_usb_can_bridge.launch.py \
+  params_file:="$(ros2 pkg prefix robstride_usb_can_bridge)/share/robstride_usb_can_bridge/config/robstride_usb_can_bridge.yaml"
 ```
 
 launch引数でYAMLの値を上書きする場合（優先順位：launch引数 > YAML > ノードの既定値）
 
 ```bash
-ros2 launch serial_can_bridge serial_can_bridge.launch.py \
-  params_file:="$(ros2 pkg prefix serial_can_bridge)/share/serial_can_bridge/config/serial_bridge.yaml" \
+ros2 launch robstride_usb_can_bridge robstride_usb_can_bridge.launch.py \
+  params_file:="$(ros2 pkg prefix robstride_usb_can_bridge)/share/robstride_usb_can_bridge/config/robstride_usb_can_bridge.yaml" \
   device:=/dev/ttyUSB1
 ```
 
 直接実行でパラメータを指定する場合
 
 ```bash
-ros2 run serial_can_bridge serial_can_bridge --ros-args -p device:=/dev/ttyUSB1
-ros2 run serial_can_bridge serial_can_bridge --ros-args \
-  --params-file "$(ros2 pkg prefix serial_can_bridge)/share/serial_can_bridge/config/serial_bridge.yaml"
+ros2 run robstride_usb_can_bridge robstride_usb_can_bridge --ros-args -p device:=/dev/ttyUSB1
+ros2 run robstride_usb_can_bridge robstride_usb_can_bridge --ros-args \
+  --params-file "$(ros2 pkg prefix robstride_usb_can_bridge)/share/robstride_usb_can_bridge/config/robstride_usb_can_bridge.yaml"
 ```
 
 ## トピック
@@ -121,7 +124,7 @@ ros2 topic pub --once /to_can_bus can_msgs/msg/Frame \
 ビルド後、ワークスペースのルートで実行
 
 ```bash
-colcon test --packages-select serial_can_bridge
+colcon test --packages-select robstride_usb_can_bridge
 colcon test-result --verbose
 ```
 

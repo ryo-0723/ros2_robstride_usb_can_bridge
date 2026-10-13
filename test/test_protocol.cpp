@@ -1,10 +1,10 @@
-#include "serial_can_bridge/protocol.hpp"
+#include "robstride_usb_can_bridge/protocol.hpp"
 
 #include <gtest/gtest.h>
 #include <array>
 #include <stdexcept>
 
-using serial_can_bridge::encode_frame;
+using robstride_usb_can_bridge::encode_frame;
 
 TEST(Protocol, OfficialEl05Example)
 {
@@ -13,7 +13,7 @@ TEST(Protocol, OfficialEl05Example)
     frame.id = 0x1200fd01;
     frame.dlc = 8;
     frame.data = {5, 0x70, 0, 0, 1, 0, 0, 0};
-    const serial_can_bridge::SerialFrame expected{
+    const robstride_usb_can_bridge::SerialFrame expected{
         0x41, 0x54, 0x90, 0x07, 0xe8, 0x0c, 8, 5, 0x70, 0, 0, 1, 0, 0, 0, 0x0d, 0x0a};
     EXPECT_EQ(encode_frame(frame), expected);
 }
@@ -25,7 +25,7 @@ TEST(Protocol, EncodingPreservesBinaryData)
     frame.id = 0x1fffffff;
     frame.dlc = 8;
     frame.data = {0x0d, 0x0a, 0x41, 0x54, 0, 0xff, 0x80, 0x01};
-    const serial_can_bridge::SerialFrame expected{0x41, 0x54, 0xff, 0xff, 0xff, 0xfc,
+    const robstride_usb_can_bridge::SerialFrame expected{0x41, 0x54, 0xff, 0xff, 0xff, 0xfc,
                                                   8,    0x0d, 0x0a, 0x41, 0x54, 0,
                                                   0xff, 0x80, 0x01, 0x0d, 0x0a};
     EXPECT_EQ(encode_frame(frame), expected);
@@ -63,7 +63,7 @@ TEST(Protocol, RejectsInvalidAndUnsupportedFrames)
     EXPECT_THROW(encode_frame(frame), std::invalid_argument);
 }
 
-using serial_can_bridge::FrameDecoder;
+using robstride_usb_can_bridge::FrameDecoder;
 
 TEST(Protocol, DecodesOfficialExample)
 {
@@ -168,8 +168,8 @@ TEST(Protocol, ResetDiscardsPartialFrame)
 
 TEST(Protocol, ValidatesOneFixedSizeFrame)
 {
-    using serial_can_bridge::decode_frame;
-    const serial_can_bridge::SerialFrame valid{0x41, 0x54, 0, 0, 0, 4, 8,    0,   0,
+    using robstride_usb_can_bridge::decode_frame;
+    const robstride_usb_can_bridge::SerialFrame valid{0x41, 0x54, 0, 0, 0, 4, 8,    0,   0,
                                                0,    0,    0, 0, 0, 0, 0x0d, 0x0a};
     ASSERT_TRUE(decode_frame(valid));
     for (const std::size_t index : {0U, 1U, 5U, 6U, 15U, 16U})
@@ -197,10 +197,10 @@ TEST(Protocol, VescDlc4UsesThirteenBytePacket)
     frame.is_extended = true;
     frame.dlc = 4;
     frame.data = {0, 0, 0x0b, 0xb8, 0xff, 0xff, 0xff, 0xff};
-    const serial_can_bridge::SerialFrame expected{0x41, 0x54, 0,    0,    0x18, 4,   4,
+    const robstride_usb_can_bridge::SerialFrame expected{0x41, 0x54, 0,    0,    0x18, 4,   4,
                                                   0,    0,    0x0b, 0xb8, 0x0d, 0x0a};
     EXPECT_EQ(encode_frame(frame), expected);
-    const auto decoded = serial_can_bridge::decode_frame(expected);
+    const auto decoded = robstride_usb_can_bridge::decode_frame(expected);
     ASSERT_TRUE(decoded);
     EXPECT_EQ(decoded->id, 0x300U);
     EXPECT_EQ(decoded->dlc, 4);
@@ -238,15 +238,15 @@ TEST(Protocol, MixedLengthsPreserveBoundaries)
 
 TEST(Protocol, RejectsTruncatedAndOversizedPackets)
 {
-    const serial_can_bridge::SerialFrame valid{0x41, 0x54, 0,    0,    0,    4,   4,
+    const robstride_usb_can_bridge::SerialFrame valid{0x41, 0x54, 0,    0,    0,    4,   4,
                                                0x41, 0x54, 0x0d, 0x0a, 0x0d, 0x0a};
     for (std::size_t size = 0; size < valid.size(); ++size)
     {
-        EXPECT_FALSE(serial_can_bridge::decode_frame({valid.begin(), valid.begin() + size}));
+        EXPECT_FALSE(robstride_usb_can_bridge::decode_frame({valid.begin(), valid.begin() + size}));
     }
     auto oversized = valid;
     oversized.push_back(0);
-    EXPECT_FALSE(serial_can_bridge::decode_frame(oversized));
+    EXPECT_FALSE(robstride_usb_can_bridge::decode_frame(oversized));
     auto bad = valid;
     bad.back() = 0;
     FrameDecoder decoder;
@@ -257,8 +257,8 @@ TEST(Protocol, RejectsTruncatedAndOversizedPackets)
 TEST(Protocol, RecoveryKeepsBytesFollowingShortPacket)
 {
     std::vector<uint8_t> stream{0x41, 0x54, 0, 0, 0, 4, 8};
-    const serial_can_bridge::SerialFrame empty{0x41, 0x54, 0, 0, 0, 4, 0, 0x0d, 0x0a};
-    const serial_can_bridge::SerialFrame short_packet{
+    const robstride_usb_can_bridge::SerialFrame empty{0x41, 0x54, 0, 0, 0, 4, 0, 0x0d, 0x0a};
+    const robstride_usb_can_bridge::SerialFrame short_packet{
         0x41, 0x54, 0, 0, 0x18, 4, 4, 0, 0, 0x0b, 0xb8, 0x0d, 0x0a};
     stream.insert(stream.end(), empty.begin(), empty.end());
     stream.insert(stream.end(), short_packet.begin(), short_packet.end());

@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>serial_can_bridge</name>
-  <version>1.0.1</version>
-  <description>ROS 2 bridge for RobStride USB-CAN AT serial packets with DLC 0 to 8.</description>
+  <name>robstride_usb_can_bridge</name>
+  <version>1.0.2</version>
+  <description>ROS 2 bridge for RobStride USB-CAN adapters using the AT protocol, without SLCAN or SocketCAN.</description>
   <maintainer email="tengbenliang742@gmail.com">ryo-0723</maintainer>
   <license>MIT</license>
   <url type="repository">https://github.com/ryo-0723/ros2_serial_can_bridge</url>

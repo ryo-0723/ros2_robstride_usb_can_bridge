@@ -1,5 +1,5 @@
-#include "serial_can_bridge/serial_can_bridge_node.hpp"
-#include "serial_can_bridge/protocol.hpp"
+#include "robstride_usb_can_bridge/robstride_usb_can_bridge_node.hpp"
+#include "robstride_usb_can_bridge/protocol.hpp"
 
 #include <gtest/gtest.h>
 #include <poll.h>
@@ -12,7 +12,7 @@
 #include <rcl/time.h>
 
 using namespace std::chrono_literals;
-using serial_can_bridge::SerialCanBridgeNode;
+using robstride_usb_can_bridge::RobStrideUsbCanBridgeNode;
 
 namespace
 {
@@ -65,8 +65,8 @@ class NodeTest : public testing::Test
 
 TEST_F(NodeTest, DefaultsAndExplicitOverrides)
 {
-    auto node = std::make_shared<SerialCanBridgeNode>(options());
-    EXPECT_STREQ(node->get_name(), "serial_can_bridge");
+    auto node = std::make_shared<RobStrideUsbCanBridgeNode>(options());
+    EXPECT_STREQ(node->get_name(), "robstride_usb_can_bridge");
     EXPECT_EQ(node->get_parameter("baud_rate").as_int(), 921600);
     EXPECT_EQ(node->get_parameter("write_timeout").as_double(), 0.1);
     EXPECT_EQ(node->get_parameter("tx_queue_size").as_int(), 100);
@@ -75,7 +75,7 @@ TEST_F(NodeTest, DefaultsAndExplicitOverrides)
     EXPECT_EQ(node->get_parameter("tx_topic").as_string(), "to_can_bus");
     EXPECT_FALSE(node->set_parameter(rclcpp::Parameter("poll_period", 0.01)).successful);
     node.reset();
-    node = std::make_shared<SerialCanBridgeNode>(
+    node = std::make_shared<RobStrideUsbCanBridgeNode>(
         options({rclcpp::Parameter("baud_rate", 115200), rclcpp::Parameter("write_timeout", 0.2),
                  rclcpp::Parameter("rx_topic", "custom_rx"),
                  rclcpp::Parameter("tx_queue_size", 3), rclcpp::Parameter("rx_queue_size", 4),
@@ -90,30 +90,30 @@ TEST_F(NodeTest, DefaultsAndExplicitOverrides)
 
 TEST_F(NodeTest, RejectsInvalidParameters)
 {
-    EXPECT_THROW(SerialCanBridgeNode(options({rclcpp::Parameter("baud_rate", 0)})),
+    EXPECT_THROW(RobStrideUsbCanBridgeNode(options({rclcpp::Parameter("baud_rate", 0)})),
                  std::invalid_argument);
     for (const auto* name : {"tx_queue_size", "rx_queue_size"})
     {
-        EXPECT_THROW(SerialCanBridgeNode(options({rclcpp::Parameter(name, 0)})),
+        EXPECT_THROW(RobStrideUsbCanBridgeNode(options({rclcpp::Parameter(name, 0)})),
                      std::invalid_argument);
-        EXPECT_THROW(SerialCanBridgeNode(options({rclcpp::Parameter(name, -1)})),
+        EXPECT_THROW(RobStrideUsbCanBridgeNode(options({rclcpp::Parameter(name, -1)})),
                      std::invalid_argument);
     }
     for (const auto value : {0.0, -0.1, 61.0, std::numeric_limits<double>::quiet_NaN()})
     {
-        EXPECT_THROW(SerialCanBridgeNode(options({rclcpp::Parameter("tx_queue_max_age", value)})),
+        EXPECT_THROW(RobStrideUsbCanBridgeNode(options({rclcpp::Parameter("tx_queue_max_age", value)})),
                      std::invalid_argument);
     }
-    EXPECT_THROW(SerialCanBridgeNode(options({rclcpp::Parameter("write_timeout", 0.0)})),
+    EXPECT_THROW(RobStrideUsbCanBridgeNode(options({rclcpp::Parameter("write_timeout", 0.0)})),
                  std::invalid_argument);
-    EXPECT_THROW(SerialCanBridgeNode(options(
+    EXPECT_THROW(RobStrideUsbCanBridgeNode(options(
                      {rclcpp::Parameter("poll_period", std::numeric_limits<double>::quiet_NaN())})),
                  std::invalid_argument);
 }
 
 TEST_F(NodeTest, ConvertsTopicsToSerialAndSerialToTopics)
 {
-    auto node = std::make_shared<SerialCanBridgeNode>(options());
+    auto node = std::make_shared<RobStrideUsbCanBridgeNode>(options());
     auto peer = std::make_shared<rclcpp::Node>("serial_test_peer");
     auto publisher = peer->create_publisher<can_msgs::msg::Frame>("to_can_bus", 100);
     std::optional<can_msgs::msg::Frame> received;
@@ -139,10 +139,10 @@ TEST_F(NodeTest, ConvertsTopicsToSerialAndSerialToTopics)
         received.reset();
         publisher->publish(frame);
         ASSERT_TRUE(wait_for(executor, [&]() { return poll(&fd, 1, 0) > 0; }));
-        serial_can_bridge::SerialFrame packet(9U + dlc);
+        robstride_usb_can_bridge::SerialFrame packet(9U + dlc);
         ASSERT_EQ(::read(master_, packet.data(), packet.size()),
                   static_cast<ssize_t>(packet.size()));
-        EXPECT_EQ(packet, serial_can_bridge::encode_frame(frame));
+        EXPECT_EQ(packet, robstride_usb_can_bridge::encode_frame(frame));
         ASSERT_EQ(::write(master_, packet.data(), packet.size()),
                   static_cast<ssize_t>(packet.size()));
         ASSERT_TRUE(wait_for(executor, [&]() { return received.has_value(); }));
@@ -169,7 +169,7 @@ TEST_F(NodeTest, ConvertsTopicsToSerialAndSerialToTopics)
 
 TEST_F(NodeTest, TimestampKeepsRosReceiveTimeAfterClockJump)
 {
-    auto node = std::make_shared<SerialCanBridgeNode>(options());
+    auto node = std::make_shared<RobStrideUsbCanBridgeNode>(options());
     auto peer = std::make_shared<rclcpp::Node>("timestamp_test_peer");
     std::optional<can_msgs::msg::Frame> received;
     auto subscription = peer->create_subscription<can_msgs::msg::Frame>(
@@ -189,7 +189,7 @@ TEST_F(NodeTest, TimestampKeepsRosReceiveTimeAfterClockJump)
     frame.is_extended = true;
     frame.dlc = 4;
     frame.data = {0, 0, 0x0b, 0xb8, 0, 0, 0, 0};
-    const auto packet = serial_can_bridge::encode_frame(frame);
+    const auto packet = robstride_usb_can_bridge::encode_frame(frame);
     ASSERT_EQ(::write(master_, packet.data(), packet.size()), static_cast<ssize_t>(packet.size()));
     // @note ROSの配信処理を止め、受信キューで待たせた後に時計を進める
     std::this_thread::sleep_for(100ms);

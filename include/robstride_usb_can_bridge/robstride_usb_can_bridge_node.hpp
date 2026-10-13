@@ -1,16 +1,16 @@
 #pragma once
 
-#include "serial_can_bridge/serial_bridge.hpp"
+#include "robstride_usb_can_bridge/serial_bridge.hpp"
 
 #include <can_msgs/msg/frame.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <memory>
 #include <string>
 
-namespace serial_can_bridge
+namespace robstride_usb_can_bridge
 {
 /// @brief ROSのCANトピックとシリアル通信を中継するノード
-class SerialCanBridgeNode : public rclcpp::Node
+class RobStrideUsbCanBridgeNode : public rclcpp::Node
 {
   public:
     /**
@@ -19,7 +19,7 @@ class SerialCanBridgeNode : public rclcpp::Node
      * @throws std::invalid_argument パラメータが許容範囲外の場合
      * @throws boost::system::system_error シリアル接続に失敗した場合
      */
-    explicit SerialCanBridgeNode(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
+    explicit RobStrideUsbCanBridgeNode(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
 
   private:
     /**
@@ -37,4 +37,4 @@ class SerialCanBridgeNode : public rclcpp::Node
     rclcpp::Subscription<can_msgs::msg::Frame>::SharedPtr subscription_;
     rclcpp::TimerBase::SharedPtr timer_;
 };
-} // namespace serial_can_bridge
+} // namespace robstride_usb_can_bridge

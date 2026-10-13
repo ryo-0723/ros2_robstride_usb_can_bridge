@@ -1,6 +1,6 @@
 #pragma once
 
-#include "serial_can_bridge/serial_frame.hpp"
+#include "robstride_usb_can_bridge/serial_frame.hpp"
 
 #include <can_msgs/msg/frame.hpp>
 #include <array>
@@ -9,7 +9,7 @@
 #include <optional>
 #include <vector>
 
-namespace serial_can_bridge
+namespace robstride_usb_can_bridge
 {
 /**
  * @brief CANフレームをRobStride USB-CANのATパケットへ変換する
@@ -47,4 +47,4 @@ class FrameDecoder
   private:
     SerialFrameParser parser_;
 };
-} // namespace serial_can_bridge
+} // namespace robstride_usb_can_bridge

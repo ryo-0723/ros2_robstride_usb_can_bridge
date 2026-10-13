@@ -1,4 +1,4 @@
-#include "serial_can_bridge/serial_can_bridge_node.hpp"
+#include "robstride_usb_can_bridge/robstride_usb_can_bridge_node.hpp"
 
 #include <cstdlib>
 #include <exception>
@@ -9,11 +9,11 @@ int main(int argc, char** argv)
     int result = EXIT_SUCCESS;
     try
     {
-        rclcpp::spin(std::make_shared<serial_can_bridge::SerialCanBridgeNode>());
+        rclcpp::spin(std::make_shared<robstride_usb_can_bridge::RobStrideUsbCanBridgeNode>());
     }
     catch (const std::exception& error)
     {
-        RCLCPP_FATAL(rclcpp::get_logger("serial_can_bridge"), "%s", error.what());
+        RCLCPP_FATAL(rclcpp::get_logger("robstride_usb_can_bridge"), "%s", error.what());
         result = EXIT_FAILURE;
     }
     rclcpp::shutdown();
