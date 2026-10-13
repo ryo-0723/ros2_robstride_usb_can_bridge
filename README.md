@@ -17,7 +17,7 @@ ROS 2、colcon、rosdepを導入し、ROS 2の環境を読み込んでから実�
 ```bash
 mkdir -p ~/ros2_ws/src
 cd ~/ros2_ws/src
-git clone https://github.com/ryo-0723/ros2_serial_can_bridge.git
+git clone https://github.com/ryo-0723/ros2_robstride_usb_can_bridge.git
 cd ~/ros2_ws
 rosdep install --from-paths src --ignore-src -y
 colcon build --packages-select robstride_usb_can_bridge
@@ -28,10 +28,43 @@ source install/setup.bash
 
 - アダプタをATモードにし、CAN側のビットレートを接続先に合わせて設定
 - CAN配線・終端抵抗・シリアルデバイスへの読み書き権限を確認
-- デバイス名が変わる場合は、`device` に `/dev/serial/by-id/` 以下のパスを指定
 
 モード切り替えとCAN側のビットレート設定はアダプタ側で行います
 `baud_rate` はPCとアダプタ間のシリアル通信速度
+
+### デバイス名を固定する場合
+
+`/dev/ttyUSB0` の番号は接続順や再接続で変わることがあるため、通常は `/dev/serial/by-id/` のパスを指定
+
+```bash
+ls -l /dev/serial/by-id/
+```
+
+表示されたアダプタの名前を `device` に指定するだけで、コード変更は不要
+以下の `対象アダプタの名前` は実際の名前に置き換え
+
+```bash
+ros2 launch robstride_usb_can_bridge robstride_usb_can_bridge.launch.py \
+  device:=/dev/serial/by-id/対象アダプタの名前
+```
+
+YAMLで設定する場合
+
+```yaml
+robstride_usb_can_bridge:
+  ros__parameters:
+    device: /dev/serial/by-id/対象アダプタの名前
+```
+
+`by-id` がない場合や同型のアダプタを区別できない場合は、USB接続ポートに対応する `by-path` を使用
+この場合はUSBの接続ポートを変えるとパスも変わります
+
+```bash
+ls -l /dev/serial/by-path/
+```
+
+実行環境からパスを参照でき、リンク先のデバイスに読み書き権限があることを確認
+コンテナでは、シンボリックリンクとリンク先のデバイスの両方を参照できるようにする
 
 ## 起動
 
@@ -137,5 +170,5 @@ colcon test-result --verbose
 
 ライセンス：MIT（[LICENSE](LICENSE)）
 
-不具合の報告先：[Issues](https://github.com/ryo-0723/ros2_serial_can_bridge/issues)
+不具合の報告先：[Issues](https://github.com/ryo-0723/ros2_robstride_usb_can_bridge/issues)
 OS、ROS 2のバージョン、アダプタの型番、実行コマンド、エラーログを添えてください
