@@ -7,3 +7,6 @@ serial_can_bridge:
     frame_id: can
     poll_period: 0.001
     write_timeout: 0.1
+    tx_queue_size: 100
+    rx_queue_size: 100
+    tx_queue_max_age: 0.1

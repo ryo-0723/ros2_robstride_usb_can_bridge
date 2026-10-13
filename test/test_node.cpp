@@ -67,21 +67,41 @@ TEST_F(NodeTest, DefaultsAndExplicitOverrides)
     EXPECT_STREQ(node->get_name(), "serial_can_bridge");
     EXPECT_EQ(node->get_parameter("baud_rate").as_int(), 921600);
     EXPECT_EQ(node->get_parameter("write_timeout").as_double(), 0.1);
+    EXPECT_EQ(node->get_parameter("tx_queue_size").as_int(), 100);
+    EXPECT_EQ(node->get_parameter("rx_queue_size").as_int(), 100);
+    EXPECT_EQ(node->get_parameter("tx_queue_max_age").as_double(), 0.1);
     EXPECT_EQ(node->get_parameter("tx_topic").as_string(), "to_can_bus");
     EXPECT_FALSE(node->set_parameter(rclcpp::Parameter("poll_period", 0.01)).successful);
     node.reset();
     node = std::make_shared<SerialCanBridgeNode>(
         options({rclcpp::Parameter("baud_rate", 115200), rclcpp::Parameter("write_timeout", 0.2),
-                 rclcpp::Parameter("rx_topic", "custom_rx")}));
+                 rclcpp::Parameter("rx_topic", "custom_rx"),
+                 rclcpp::Parameter("tx_queue_size", 3), rclcpp::Parameter("rx_queue_size", 4),
+                 rclcpp::Parameter("tx_queue_max_age", 0.2)}));
     EXPECT_EQ(node->get_parameter("baud_rate").as_int(), 115200);
     EXPECT_EQ(node->get_parameter("write_timeout").as_double(), 0.2);
     EXPECT_EQ(node->get_parameter("rx_topic").as_string(), "custom_rx");
+    EXPECT_EQ(node->get_parameter("tx_queue_size").as_int(), 3);
+    EXPECT_EQ(node->get_parameter("rx_queue_size").as_int(), 4);
+    EXPECT_EQ(node->get_parameter("tx_queue_max_age").as_double(), 0.2);
 }
 
 TEST_F(NodeTest, RejectsInvalidParameters)
 {
     EXPECT_THROW(SerialCanBridgeNode(options({rclcpp::Parameter("baud_rate", 0)})),
                  std::invalid_argument);
+    for (const auto* name : {"tx_queue_size", "rx_queue_size"})
+    {
+        EXPECT_THROW(SerialCanBridgeNode(options({rclcpp::Parameter(name, 0)})),
+                     std::invalid_argument);
+        EXPECT_THROW(SerialCanBridgeNode(options({rclcpp::Parameter(name, -1)})),
+                     std::invalid_argument);
+    }
+    for (const auto value : {0.0, -0.1, 61.0, std::numeric_limits<double>::quiet_NaN()})
+    {
+        EXPECT_THROW(SerialCanBridgeNode(options({rclcpp::Parameter("tx_queue_max_age", value)})),
+                     std::invalid_argument);
+    }
     EXPECT_THROW(SerialCanBridgeNode(options({rclcpp::Parameter("write_timeout", 0.0)})),
                  std::invalid_argument);
     EXPECT_THROW(SerialCanBridgeNode(options(

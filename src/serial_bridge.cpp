@@ -6,14 +6,19 @@
 namespace serial_can_bridge
 {
 SerialBridge::SerialBridge(const std::string& device, unsigned int baud_rate,
-                           std::chrono::milliseconds write_timeout)
+                           std::chrono::milliseconds write_timeout,
+                           std::size_t tx_queue_size, std::size_t rx_queue_size,
+                           std::chrono::milliseconds tx_queue_max_age)
     : device_(device), baud_rate_(baud_rate), write_timeout_(write_timeout),
+      tx_queue_size_(tx_queue_size), rx_queue_size_(rx_queue_size),
+      tx_queue_max_age_(tx_queue_max_age),
       work_(boost::asio::make_work_guard(io_)), port_(io_), write_timer_(io_)
 {
-    if (device.empty() || baud_rate == 0 || write_timeout.count() <= 0)
+    if (device.empty() || baud_rate == 0 || write_timeout.count() <= 0 ||
+        tx_queue_size == 0 || rx_queue_size == 0 || tx_queue_max_age.count() <= 0)
     {
         throw std::invalid_argument(
-            "device must not be empty; baud_rate and write_timeout must be positive");
+            "device must not be empty; baud_rate, queue sizes and timeouts must be positive");
     }
 }
 
@@ -43,6 +48,14 @@ void SerialBridge::open()
             std::lock_guard<std::mutex> receive_lock(receive_mutex_);
             received_.clear();
             io_error_.clear();
+            rx_overflow_ = 0;
+        }
+        {
+            std::lock_guard<std::mutex> send_lock(send_mutex_);
+            write_queue_.clear();
+            write_scheduled_ = false;
+            tx_overflow_ = 0;
+            tx_expired_ = 0;
         }
         parser_.reset();
         accepting_ = true;
@@ -76,7 +89,11 @@ void SerialBridge::close()
     io_.restart();
     // @note バッファを再利用する前に送受信のキャンセル処理を完了させる
     io_.poll();
-    write_queue_.clear();
+    {
+        std::lock_guard<std::mutex> send_lock(send_mutex_);
+        write_queue_.clear();
+        write_scheduled_ = false;
+    }
     writing_ = false;
 }
 
@@ -96,19 +113,46 @@ void SerialBridge::write(SerialFrame data)
     {
         throw std::logic_error("serial port is not open");
     }
-    boost::asio::post(io_,
-                      [this, data]()
-                      {
-                          if (!accepting_)
+    std::lock_guard<std::mutex> send_lock(send_mutex_);
+    // @note 通信失敗と送信受付が重なった場合も、停止後のキュー追加を防ぐ
+    if (!accepting_)
+    {
+        throw std::logic_error("serial port is not open");
+    }
+    const auto now = std::chrono::steady_clock::now();
+    discard_expired_writes(now);
+    if (write_queue_.size() >= tx_queue_size_)
+    {
+        write_queue_.pop_front();
+        ++tx_overflow_;
+    }
+    write_queue_.push_back({std::move(data), now});
+    if (!write_scheduled_)
+    {
+        boost::asio::post(io_, [this]()
                           {
-                              return;
-                          }
-                          write_queue_.push_back(data);
-                          if (!writing_)
-                          {
-                              start_write();
-                          }
-                      });
+                              if (accepting_)
+                              {
+                                  start_write();
+                              }
+                          });
+        write_scheduled_ = true;
+    }
+}
+
+void SerialBridge::discard_expired_writes(std::chrono::steady_clock::time_point now)
+{
+    while (!write_queue_.empty() && now - write_queue_.front().queued_at >= tx_queue_max_age_)
+    {
+        write_queue_.pop_front();
+        ++tx_expired_;
+    }
+}
+
+SerialBridge::QueueStatistics SerialBridge::queue_statistics() const
+{
+    std::scoped_lock lock(send_mutex_, receive_mutex_);
+    return {write_queue_.size(), received_.size(), tx_overflow_, tx_expired_, rx_overflow_};
 }
 
 boost::system::error_code SerialBridge::error() const
@@ -119,10 +163,19 @@ boost::system::error_code SerialBridge::error() const
 
 void SerialBridge::start_write()
 {
+    {
+        std::lock_guard<std::mutex> send_lock(send_mutex_);
+        discard_expired_writes(std::chrono::steady_clock::now());
+        if (write_queue_.empty())
+        {
+            write_scheduled_ = false;
+            return;
+        }
+        active_write_ = std::move(write_queue_.front().data);
+        write_queue_.pop_front();
+    }
     writing_ = true;
     const auto id = ++write_id_;
-    active_write_ = write_queue_.front();
-    write_queue_.pop_front();
     write_timer_.expires_after(write_timeout_);
     write_timer_.async_wait(
         [this, id](const boost::system::error_code& error)
@@ -147,10 +200,7 @@ void SerialBridge::start_write()
                                      return;
                                  }
                                  writing_ = false;
-                                 if (!write_queue_.empty())
-                                 {
-                                     start_write();
-                                 }
+                                 start_write();
                              });
 }
 
@@ -169,7 +219,11 @@ void SerialBridge::fail(const boost::system::error_code& error)
     port_.close(ignored);
     // @note 送信途中で失敗した可能性があるため、未送信データを破棄する
     // @note 通信の再開にはclose()後にopen()を呼ぶ
-    write_queue_.clear();
+    {
+        std::lock_guard<std::mutex> send_lock(send_mutex_);
+        write_queue_.clear();
+        write_scheduled_ = false;
+    }
     writing_ = false;
 }
 
@@ -198,7 +252,15 @@ void SerialBridge::start_read()
                               const auto packets = parser_.feed(buffer_.data(), count);
                               {
                                   std::lock_guard<std::mutex> lock(receive_mutex_);
-                                  received_.insert(received_.end(), packets.begin(), packets.end());
+                                  for (const auto& packet : packets)
+                                  {
+                                      if (received_.size() >= rx_queue_size_)
+                                      {
+                                          received_.pop_front();
+                                          ++rx_overflow_;
+                                      }
+                                      received_.push_back(packet);
+                                  }
                               }
                               if (error && accepting_)
                               {

@@ -32,6 +32,7 @@ class SerialCanBridgeNode : public rclcpp::Node
 
     std::string frame_id_;
     std::unique_ptr<SerialBridge> serial_;
+    SerialBridge::QueueStatistics last_queue_statistics_;
     rclcpp::Publisher<can_msgs::msg::Frame>::SharedPtr publisher_;
     rclcpp::Subscription<can_msgs::msg::Frame>::SharedPtr subscription_;
     rclcpp::TimerBase::SharedPtr timer_;

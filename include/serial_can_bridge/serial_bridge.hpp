@@ -23,15 +23,30 @@ namespace serial_can_bridge
 class SerialBridge
 {
   public:
+    /** @brief キューの現在件数と、接続開始以降の破棄件数 */
+    struct QueueStatistics
+    {
+        std::size_t tx_pending{0};
+        std::size_t rx_pending{0};
+        uint64_t tx_overflow{0};
+        uint64_t tx_expired{0};
+        uint64_t rx_overflow{0};
+    };
+
     /**
      * @brief シリアル接続の設定を保持する（ポートはまだ開かない）
      * @param device シリアルデバイスのパス
      * @param baud_rate シリアル通信速度
      * @param write_timeout 各パケットの送信タイムアウト
-     * @throws std::invalid_argument deviceが空、または速度・タイムアウトが正でない場合
+     * @param tx_queue_size 送信待ちの最大件数（送信中の1件は含まない）
+     * @param rx_queue_size 未読の受信パケットの最大件数
+     * @param tx_queue_max_age 送信受付から送信開始までの有効期限
+     * @throws std::invalid_argument deviceが空、または速度・件数・時間が正でない場合
      */
     SerialBridge(const std::string& device, unsigned int baud_rate,
-                 std::chrono::milliseconds write_timeout = std::chrono::milliseconds(100));
+                 std::chrono::milliseconds write_timeout = std::chrono::milliseconds(100),
+                 std::size_t tx_queue_size = 100, std::size_t rx_queue_size = 100,
+                 std::chrono::milliseconds tx_queue_max_age = std::chrono::milliseconds(100));
     /// @brief 通信を停止してポートを閉じる
     ~SerialBridge();
     SerialBridge(const SerialBridge&) = delete;
@@ -53,6 +68,7 @@ class SerialBridge
      * @throws std::logic_error ポートが開いていない場合
      * @throws boost::system::system_error 通信エラーが記録されている場合
      * @note タイムアウトはキュー待ちを含まず、各パケットの送信開始から計測する
+     * @note 期限切れと上限超過時は古い送信待ちを破棄し、送信中のパケットは維持する
      */
     void write(SerialFrame data);
     /**
@@ -67,8 +83,17 @@ class SerialBridge
      * @throws boost::system::system_error 受信キューが空で通信エラーがある場合
      */
     std::optional<SerialFrame> read();
+    /// @brief キュー件数と破棄件数を取得する（open()で破棄件数をリセット）
+    QueueStatistics queue_statistics() const;
 
   private:
+    struct PendingWrite
+    {
+        SerialFrame data;
+        std::chrono::steady_clock::time_point queued_at;
+    };
+    /// @brief 期限切れの送信待ちを破棄する（send_mutex_を取得して呼ぶ）
+    void discard_expired_writes(std::chrono::steady_clock::time_point now);
     /// @brief 次の非同期受信を開始する
     void start_read();
     /// @brief 送信キューの先頭を取り出し、タイムアウト付きで送信する
@@ -82,6 +107,9 @@ class SerialBridge
     std::string device_;
     unsigned int baud_rate_;
     std::chrono::milliseconds write_timeout_;
+    std::size_t tx_queue_size_;
+    std::size_t rx_queue_size_;
+    std::chrono::milliseconds tx_queue_max_age_;
     boost::asio::io_context io_;
     boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work_;
     boost::asio::serial_port port_;
@@ -90,8 +118,13 @@ class SerialBridge
     /// @brief ポートの開閉と送信の受付を直列化するロック
     std::mutex lifecycle_mutex_;
     std::atomic<bool> accepting_{false};
+    mutable std::mutex send_mutex_;
+    std::deque<PendingWrite> write_queue_;
+    /// @brief 起動通知の重複を防ぎ、Asioの通知キューも増え続けないようにする
+    bool write_scheduled_{false};
+    uint64_t tx_overflow_{0};
+    uint64_t tx_expired_{0};
     // @note 以下の送信状態は送受信スレッド、またはその終了後にだけ操作する
-    std::deque<SerialFrame> write_queue_;
     SerialFrame active_write_{};
     bool writing_{false};
     std::size_t write_id_{0};
@@ -99,6 +132,7 @@ class SerialBridge
     mutable std::mutex receive_mutex_;
     SerialFrameParser parser_;
     std::deque<SerialFrame> received_;
+    uint64_t rx_overflow_{0};
     boost::system::error_code io_error_;
 };
 } // namespace serial_can_bridge

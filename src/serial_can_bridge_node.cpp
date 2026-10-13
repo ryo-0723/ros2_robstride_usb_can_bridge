@@ -21,18 +21,26 @@ SerialCanBridgeNode::SerialCanBridgeNode(const rclcpp::NodeOptions& options)
     frame_id_ = declare_parameter<std::string>("frame_id", "can", descriptor);
     const auto period = declare_parameter<double>("poll_period", 0.001, descriptor);
     const auto timeout = declare_parameter<double>("write_timeout", 0.1, descriptor);
+    const auto tx_queue_size = declare_parameter<int64_t>("tx_queue_size", 100, descriptor);
+    const auto rx_queue_size = declare_parameter<int64_t>("rx_queue_size", 100, descriptor);
+    const auto max_age = declare_parameter<double>("tx_queue_max_age", 0.1, descriptor);
 
     if (device.empty() || baud <= 0 || baud > std::numeric_limits<int>::max() ||
         !std::isfinite(period) || period < 0.000001 || period > 1.0 || !std::isfinite(timeout) ||
-        timeout < 0.001 || timeout > 60.0)
+        timeout < 0.001 || timeout > 60.0 || tx_queue_size <= 0 || rx_queue_size <= 0 ||
+        static_cast<uint64_t>(tx_queue_size) > std::numeric_limits<std::size_t>::max() ||
+        static_cast<uint64_t>(rx_queue_size) > std::numeric_limits<std::size_t>::max() ||
+        !std::isfinite(max_age) || max_age < 0.001 || max_age > 60.0)
     {
         throw std::invalid_argument(
             "Expected nonempty device, positive baud_rate, poll_period (1us..1s), "
-            "and write_timeout (1ms..60s)");
+            "positive queue sizes, and write_timeout/tx_queue_max_age (1ms..60s)");
     }
     serial_ = std::make_unique<SerialBridge>(
         device, static_cast<unsigned int>(baud),
-        std::chrono::milliseconds(static_cast<int64_t>(std::ceil(timeout * 1000.0))));
+        std::chrono::milliseconds(static_cast<int64_t>(std::ceil(timeout * 1000.0))),
+        static_cast<std::size_t>(tx_queue_size), static_cast<std::size_t>(rx_queue_size),
+        std::chrono::milliseconds(static_cast<int64_t>(std::ceil(max_age * 1000.0))));
 
     const auto qos = rclcpp::QoS(rclcpp::KeepLast(100)).reliable();
     publisher_ = create_publisher<can_msgs::msg::Frame>(rx, qos);
@@ -66,6 +74,19 @@ void SerialCanBridgeNode::transmit(const can_msgs::msg::Frame& frame)
 
 void SerialCanBridgeNode::receive()
 {
+    const auto stats = serial_->queue_statistics();
+    if (stats.tx_overflow != last_queue_statistics_.tx_overflow ||
+        stats.tx_expired != last_queue_statistics_.tx_expired ||
+        stats.rx_overflow != last_queue_statistics_.rx_overflow)
+    {
+        RCLCPP_WARN_THROTTLE(
+            get_logger(), *get_clock(), 1000,
+            "Dropped queued frames (total): TX overflow=%llu, TX expired=%llu, RX overflow=%llu",
+            static_cast<unsigned long long>(stats.tx_overflow),
+            static_cast<unsigned long long>(stats.tx_expired),
+            static_cast<unsigned long long>(stats.rx_overflow));
+        last_queue_statistics_ = stats;
+    }
     // @note 大量受信で他のコールバックを妨げないよう、1回の処理数を制限
     for (std::size_t count = 0; count < 100; ++count)
     {

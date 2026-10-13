@@ -16,11 +16,15 @@ PARAMETER_TYPES = {
     'frame_id': str,
     'poll_period': float,
     'write_timeout': float,
+    'tx_queue_size': int,
+    'rx_queue_size': int,
+    'tx_queue_max_age': float,
 }
 
 
 def launch_node(context):
-    """@brief YAMLを読み込み、指定されたlaunch引数で上書きする.
+    """
+    @brief YAMLを読み込み、指定されたlaunch引数で上書きする.
 
     @param context launch引数を評価する実行コンテキスト
     @return シリアルブリッジの起動アクションの一覧
@@ -51,7 +55,8 @@ def launch_node(context):
 
 
 def generate_launch_description():
-    """@brief 任意の設定をlaunch引数として宣言する.
+    """
+    @brief 任意の設定をlaunch引数として宣言する.
 
     @return ノード起動と引数宣言をまとめたLaunchDescription
     @note 未指定のパラメータはノードの既定値を使う
