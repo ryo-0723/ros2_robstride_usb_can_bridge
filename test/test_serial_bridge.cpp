@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <atomic>
 #include <cerrno>
 #include <functional>
 
@@ -361,5 +362,59 @@ TEST_F(SerialBridgeTest, RejectsInvalidQueueSettings)
     EXPECT_THROW(SerialBridge(device_, 115200, 1s, 0, 100), std::invalid_argument);
     EXPECT_THROW(SerialBridge(device_, 115200, 1s, 100, 0), std::invalid_argument);
     EXPECT_THROW(SerialBridge(device_, 115200, 1s, 100, 100, 0ms), std::invalid_argument);
+}
+
+TEST_F(SerialBridgeTest, TimestampUsesFinalReceiveAndSurvivesQueueWait)
+{
+    std::atomic<int64_t> clock_ns{100};
+    std::atomic<int> clock_reads{0};
+    SerialBridge serial(device_, 115200, 1s, 100, 100, 1s,
+                        [&]()
+                        {
+                            const auto value = clock_ns.load();
+                            ++clock_reads;
+                            return value;
+                        });
+    serial.open();
+    const auto frame = packet(0x42);
+    ASSERT_EQ(::write(master_, frame.data(), 10), 10);
+    ASSERT_TRUE(wait_for([&]() { return clock_reads.load() > 0; }));
+    EXPECT_EQ(serial.queue_statistics().rx_pending, 0U);
+    clock_ns = 200;
+    ASSERT_EQ(::write(master_, frame.data() + 10, frame.size() - 10), 7);
+    ASSERT_TRUE(wait_for([&]() { return serial.queue_statistics().rx_pending == 1; }));
+    clock_ns = 300;
+    const auto received = serial.read_with_timestamp();
+    ASSERT_TRUE(received);
+    EXPECT_EQ(received->data, frame);
+    EXPECT_EQ(received->received_at_ns, 200);
+    EXPECT_FALSE(serial.read_with_timestamp());
+}
+
+TEST_F(SerialBridgeTest, ReceiveOverflowPreservesRetainedTimestamps)
+{
+    std::atomic<int64_t> clock_ns{100};
+    SerialBridge serial(device_, 115200, 1s, 100, 2, 1s, [&]() { return clock_ns.load(); });
+    serial.open();
+    for (uint8_t value = 1; value <= 3; ++value)
+    {
+        clock_ns = value * 100;
+        const auto frame = packet(value);
+        ASSERT_EQ(::write(master_, frame.data(), frame.size()), 17);
+        ASSERT_TRUE(wait_for([&]()
+                            {
+                                const auto stats = serial.queue_statistics();
+                                return stats.rx_pending + stats.rx_overflow == value;
+                            }));
+    }
+    clock_ns = 400;
+    for (uint8_t value = 2; value <= 3; ++value)
+    {
+        const auto received = serial.read_with_timestamp();
+        ASSERT_TRUE(received);
+        EXPECT_EQ(received->data, packet(value));
+        EXPECT_EQ(received->received_at_ns, value * 100);
+    }
+    EXPECT_FALSE(serial.read_with_timestamp());
 }
 } // namespace

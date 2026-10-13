@@ -8,6 +8,8 @@
 #include <chrono>
 #include <functional>
 #include <limits>
+#include <mutex>
+#include <rcl/time.h>
 
 using namespace std::chrono_literals;
 using serial_can_bridge::SerialCanBridgeNode;
@@ -163,5 +165,42 @@ TEST_F(NodeTest, ConvertsTopicsToSerialAndSerialToTopics)
         std::this_thread::sleep_for(1ms);
     }
     EXPECT_EQ(poll(&fd, 1, 0), 0);
+}
+
+TEST_F(NodeTest, TimestampKeepsRosReceiveTimeAfterClockJump)
+{
+    auto node = std::make_shared<SerialCanBridgeNode>(options());
+    auto peer = std::make_shared<rclcpp::Node>("timestamp_test_peer");
+    std::optional<can_msgs::msg::Frame> received;
+    auto subscription = peer->create_subscription<can_msgs::msg::Frame>(
+        "from_can_bus", 100, [&](can_msgs::msg::Frame::ConstSharedPtr msg) { received = *msg; });
+    rclcpp::executors::SingleThreadedExecutor executor;
+    executor.add_node(node);
+    executor.add_node(peer);
+    ASSERT_TRUE(wait_for(executor, [&]() { return subscription->get_publisher_count() > 0; }));
+    const auto clock = node->get_clock();
+    {
+        std::lock_guard<std::mutex> lock(clock->get_clock_mutex());
+        ASSERT_EQ(rcl_enable_ros_time_override(clock->get_clock_handle()), RCL_RET_OK);
+        ASSERT_EQ(rcl_set_ros_time_override(clock->get_clock_handle(), 100000000000LL), RCL_RET_OK);
+    }
+    can_msgs::msg::Frame frame;
+    frame.id = 0x300;
+    frame.is_extended = true;
+    frame.dlc = 4;
+    frame.data = {0, 0, 0x0b, 0xb8, 0, 0, 0, 0};
+    const auto packet = serial_can_bridge::encode_frame(frame);
+    ASSERT_EQ(::write(master_, packet.data(), packet.size()), static_cast<ssize_t>(packet.size()));
+    // @note ROSの配信処理を止め、受信キューで待たせた後に時計を進める
+    std::this_thread::sleep_for(100ms);
+    {
+        std::lock_guard<std::mutex> lock(clock->get_clock_mutex());
+        ASSERT_EQ(rcl_set_ros_time_override(clock->get_clock_handle(), 200000000000LL), RCL_RET_OK);
+    }
+    ASSERT_TRUE(wait_for(executor, [&]() { return received.has_value(); }));
+    EXPECT_EQ(received->header.stamp.sec, 100);
+    EXPECT_EQ(received->header.stamp.nanosec, 0U);
+    EXPECT_EQ(received->header.frame_id, "can");
+    EXPECT_EQ(received->dlc, 4);
 }
 } // namespace

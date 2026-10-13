@@ -27,7 +27,7 @@ class SerialCanBridgeNode : public rclcpp::Node
      * @param frame 送信トピックから受け取ったCANフレーム
      */
     void transmit(const can_msgs::msg::Frame& frame);
-    /// @brief 受信キューから最大100フレームを取り出し、時刻とframe_idを付けて配信する
+    /// @brief 受信時刻を保持したまま最大100フレームを取り出し、frame_idを付けて配信する
     void receive();
 
     std::string frame_id_;

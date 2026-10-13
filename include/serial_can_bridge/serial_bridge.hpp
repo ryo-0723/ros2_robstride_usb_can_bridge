@@ -7,6 +7,7 @@
 #include <atomic>
 #include <chrono>
 #include <deque>
+#include <functional>
 #include <optional>
 #include <cstdint>
 #include <mutex>
@@ -23,6 +24,16 @@ namespace serial_can_bridge
 class SerialBridge
 {
   public:
+    /// @brief 受信が完了した時刻をナノ秒で返す関数（送受信スレッドから呼ぶため例外を投げないこと）
+    using ReceiveClock = std::function<int64_t()>;
+
+    /** @brief ATパケットと、パケット末尾を受信した時刻 */
+    struct ReceivedFrame
+    {
+        SerialFrame data;
+        int64_t received_at_ns{0};
+    };
+
     /** @brief キューの現在件数と、接続開始以降の破棄件数 */
     struct QueueStatistics
     {
@@ -41,12 +52,14 @@ class SerialBridge
      * @param tx_queue_size 送信待ちの最大件数（送信中の1件は含まない）
      * @param rx_queue_size 未読の受信パケットの最大件数
      * @param tx_queue_max_age 送信受付から送信開始までの有効期限
+     * @param receive_clock 受信時刻を取得する関数（未指定ならシステム時刻）
      * @throws std::invalid_argument deviceが空、または速度・件数・時間が正でない場合
      */
     SerialBridge(const std::string& device, unsigned int baud_rate,
                  std::chrono::milliseconds write_timeout = std::chrono::milliseconds(100),
                  std::size_t tx_queue_size = 100, std::size_t rx_queue_size = 100,
-                 std::chrono::milliseconds tx_queue_max_age = std::chrono::milliseconds(100));
+                 std::chrono::milliseconds tx_queue_max_age = std::chrono::milliseconds(100),
+                 ReceiveClock receive_clock = {});
     /// @brief 通信を停止してポートを閉じる
     ~SerialBridge();
     SerialBridge(const SerialBridge&) = delete;
@@ -83,6 +96,13 @@ class SerialBridge
      * @throws boost::system::system_error 受信キューが空で通信エラーがある場合
      */
     std::optional<SerialFrame> read();
+    /**
+     * @brief 受信時刻付きで1パケット取り出す
+     * @return 受信パケットと保存した時刻、キューが空ならstd::nullopt
+     * @throws boost::system::system_error 受信キューが空で通信エラーがある場合
+     * @note 時刻はシリアル受信完了時に保存し、キューから取り出しても変更しない
+     */
+    std::optional<ReceivedFrame> read_with_timestamp();
     /// @brief キュー件数と破棄件数を取得する（open()で破棄件数をリセット）
     QueueStatistics queue_statistics() const;
 
@@ -110,6 +130,7 @@ class SerialBridge
     std::size_t tx_queue_size_;
     std::size_t rx_queue_size_;
     std::chrono::milliseconds tx_queue_max_age_;
+    ReceiveClock receive_clock_;
     boost::asio::io_context io_;
     boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work_;
     boost::asio::serial_port port_;
@@ -131,7 +152,7 @@ class SerialBridge
     std::array<uint8_t, 4096> buffer_{};
     mutable std::mutex receive_mutex_;
     SerialFrameParser parser_;
-    std::deque<SerialFrame> received_;
+    std::deque<ReceivedFrame> received_;
     uint64_t rx_overflow_{0};
     boost::system::error_code io_error_;
 };

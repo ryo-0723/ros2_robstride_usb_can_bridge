@@ -40,7 +40,8 @@ SerialCanBridgeNode::SerialCanBridgeNode(const rclcpp::NodeOptions& options)
         device, static_cast<unsigned int>(baud),
         std::chrono::milliseconds(static_cast<int64_t>(std::ceil(timeout * 1000.0))),
         static_cast<std::size_t>(tx_queue_size), static_cast<std::size_t>(rx_queue_size),
-        std::chrono::milliseconds(static_cast<int64_t>(std::ceil(max_age * 1000.0))));
+        std::chrono::milliseconds(static_cast<int64_t>(std::ceil(max_age * 1000.0))),
+        [clock = get_clock()]() { return clock->now().nanoseconds(); });
 
     const auto qos = rclcpp::QoS(rclcpp::KeepLast(100)).reliable();
     publisher_ = create_publisher<can_msgs::msg::Frame>(rx, qos);
@@ -90,14 +91,14 @@ void SerialCanBridgeNode::receive()
     // @note 大量受信で他のコールバックを妨げないよう、1回の処理数を制限
     for (std::size_t count = 0; count < 100; ++count)
     {
-        const auto packet = serial_->read();
+        const auto packet = serial_->read_with_timestamp();
         if (!packet)
         {
             break;
         }
-        if (auto frame = decode_frame(*packet))
+        if (auto frame = decode_frame(packet->data))
         {
-            frame->header.stamp = now();
+            frame->header.stamp = rclcpp::Time(packet->received_at_ns, get_clock()->get_clock_type());
             frame->header.frame_id = frame_id_;
             publisher_->publish(*frame);
         }

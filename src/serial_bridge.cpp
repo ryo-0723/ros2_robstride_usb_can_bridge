@@ -8,10 +8,11 @@ namespace serial_can_bridge
 SerialBridge::SerialBridge(const std::string& device, unsigned int baud_rate,
                            std::chrono::milliseconds write_timeout,
                            std::size_t tx_queue_size, std::size_t rx_queue_size,
-                           std::chrono::milliseconds tx_queue_max_age)
+                           std::chrono::milliseconds tx_queue_max_age, ReceiveClock receive_clock)
     : device_(device), baud_rate_(baud_rate), write_timeout_(write_timeout),
       tx_queue_size_(tx_queue_size), rx_queue_size_(rx_queue_size),
       tx_queue_max_age_(tx_queue_max_age),
+      receive_clock_(std::move(receive_clock)),
       work_(boost::asio::make_work_guard(io_)), port_(io_), write_timer_(io_)
 {
     if (device.empty() || baud_rate == 0 || write_timeout.count() <= 0 ||
@@ -19,6 +20,14 @@ SerialBridge::SerialBridge(const std::string& device, unsigned int baud_rate,
     {
         throw std::invalid_argument(
             "device must not be empty; baud_rate, queue sizes and timeouts must be positive");
+    }
+    if (!receive_clock_)
+    {
+        receive_clock_ = []()
+        {
+            return std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+        };
     }
 }
 
@@ -229,6 +238,15 @@ void SerialBridge::fail(const boost::system::error_code& error)
 
 std::optional<SerialFrame> SerialBridge::read()
 {
+    if (auto received = read_with_timestamp())
+    {
+        return std::move(received->data);
+    }
+    return std::nullopt;
+}
+
+std::optional<SerialBridge::ReceivedFrame> SerialBridge::read_with_timestamp()
+{
     std::lock_guard<std::mutex> lock(receive_mutex_);
     // @note 通信エラーがあっても、受信済みのパケットを先に返す
     if (received_.empty() && io_error_)
@@ -239,7 +257,7 @@ std::optional<SerialFrame> SerialBridge::read()
     {
         return std::nullopt;
     }
-    auto result = received_.front();
+    auto result = std::move(received_.front());
     received_.pop_front();
     return result;
 }
@@ -249,6 +267,8 @@ void SerialBridge::start_read()
     port_.async_read_some(boost::asio::buffer(buffer_),
                           [this](const boost::system::error_code& error, std::size_t count)
                           {
+                              // @note 分割受信ではパケット末尾を受信した回の時刻を使う
+                              const auto received_at = count > 0 ? receive_clock_() : 0;
                               const auto packets = parser_.feed(buffer_.data(), count);
                               {
                                   std::lock_guard<std::mutex> lock(receive_mutex_);
@@ -259,7 +279,7 @@ void SerialBridge::start_read()
                                           received_.pop_front();
                                           ++rx_overflow_;
                                       }
-                                      received_.push_back(packet);
+                                      received_.push_back({packet, received_at});
                                   }
                               }
                               if (error && accepting_)
